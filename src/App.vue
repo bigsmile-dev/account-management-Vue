@@ -21,7 +21,7 @@ import AccountForm from './components/AccountForm.vue'
 
 body {
   font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f8fafc;
   min-height: 100vh;
 }
 

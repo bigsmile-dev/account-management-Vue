@@ -38,24 +38,24 @@
       <!-- Main Content -->
       <div class="content-section">
         <!-- Headers -->
-        <div class="table-header">
-          <div class="header-cell col-3">
+        <div class="table-header-grid">
+          <div class="header-tags">
             <q-icon name="label" size="sm" class="q-mr-xs" />
             Метки
           </div>
-          <div class="header-cell col-2">
+          <div class="header-type">
             <q-icon name="category" size="sm" class="q-mr-xs" />
             Тип записи
           </div>
-          <div class="header-cell col-3">
+          <div class="header-login">
             <q-icon name="person" size="sm" class="q-mr-xs" />
             Логин
           </div>
-          <div class="header-cell col-3">
+          <div class="header-password">
             <q-icon name="lock" size="sm" class="q-mr-xs" />
             Пароль
           </div>
-          <div class="header-cell col-1">
+          <div class="header-delete">
             <q-icon name="settings" size="sm" />
           </div>
         </div>
@@ -69,9 +69,9 @@
             flat
             bordered
           >
-            <q-card-section class="account-row">
+            <q-card-section class="account-row-grid" :class="account.recordType === 'LDAP' ? 'ldap-layout' : 'local-layout'">
               <!-- Tags field -->
-              <div class="field-container col-3">
+              <div class="grid-tags">
                 <q-input
                   v-model="tagsInputs[account.id]"
                   outlined
@@ -90,7 +90,7 @@
               </div>
 
               <!-- Record type select -->
-              <div class="field-container col-2">
+              <div class="grid-type">
                 <q-select
                   v-model="account.recordType"
                   :options="recordTypeOptions"
@@ -106,7 +106,7 @@
               </div>
 
               <!-- Login field -->
-              <div class="field-container col-3">
+              <div class="grid-login">
                 <q-input
                   v-model="account.login"
                   outlined
@@ -124,10 +124,10 @@
                 </q-input>
               </div>
 
-              <!-- Password field -->
-              <div class="field-container col-3">
+              <!-- Password field - only shown when Local -->
+              <div v-if="account.recordType === 'Локальная' || account.recordType === 'Local'" class="grid-password">
                 <q-input
-                  v-if="account.recordType === 'Локальная'"
+                  :key="`password-${account.id}-${account.recordType}`"
                   v-model="account.password"
                   :type="showPasswords[account.id] ? 'text' : 'password'"
                   outlined
@@ -151,14 +151,10 @@
                     />
                   </template>
                 </q-input>
-                <div v-else class="password-disabled">
-                  <q-icon name="lock" color="grey-4" class="q-mr-sm" />
-                  <span class="text-grey-5">LDAP аутентификация</span>
-                </div>
               </div>
 
               <!-- Delete button -->
-              <div class="field-container col-1 text-right">
+              <div class="grid-delete">
                 <q-btn
                   round
                   color="negative"
@@ -210,9 +206,9 @@ const validationErrors = ref<Record<string, ValidationErrors>>({})
 const showPasswords = ref<Record<string, boolean>>({})
 
 // Record type options
-const recordTypeOptions: { label: string; value: RecordType }[] = [
-  { label: 'Локальная', value: 'Локальная' },
-  { label: 'LDAP', value: 'LDAP' }
+const recordTypeOptions: RecordType[] = [
+  'Локальная',
+  'LDAP'
 ]
 
 // Initialize tags inputs for existing accounts
@@ -256,23 +252,44 @@ const updateAccountTags = (id: string) => {
 
 // Update account record type
 const updateAccountRecordType = (id: string, recordType: RecordType) => {
+  const account = accountStore.accounts.find(acc => acc.id === id)
+  if (!account) return
+
   const updates: any = { recordType }
   if (recordType === 'LDAP') {
     updates.password = null
-  } else if (recordType === 'Локальная') {
-    updates.password = ''
+  } else if (recordType === 'Локальная' || recordType === 'Local') {
+    // Ensure password is initialized as empty string for local accounts
+    updates.password = account.password === null ? '' : account.password
   }
+  
   accountStore.updateAccount(id, updates)
+  
+  // Force reactivity update by clearing and resetting validation errors
+  if (validationErrors.value[id]) {
+    validationErrors.value[id] = { ...validationErrors.value[id] }
+  }
+  
   validateAccount(id)
 }
 
 // Update account login
 const updateAccountLogin = (id: string) => {
+  const account = accountStore.accounts.find(acc => acc.id === id)
+  if (account) {
+    // Save the current login value to the store
+    accountStore.updateAccount(id, { login: account.login })
+  }
   validateAccount(id)
 }
 
 // Update account password
 const updateAccountPassword = (id: string) => {
+  const account = accountStore.accounts.find(acc => acc.id === id)
+  if (account) {
+    // Save the current password value to the store
+    accountStore.updateAccount(id, { password: account.password })
+  }
   validateAccount(id)
 }
 
@@ -294,7 +311,7 @@ const validateAccount = (id: string) => {
   }
 
   // Validate password for local accounts
-  if (account.recordType === 'Локальная' && !account.password?.trim()) {
+  if ((account.recordType === 'Локальная' || account.recordType === 'Local') && !account.password?.trim()) {
     errors.password = true
   }
 
@@ -310,6 +327,16 @@ watch(
   { deep: true, immediate: true }
 )
 
+// Watch for deep changes in accounts data and auto-save
+watch(
+  () => accountStore.accounts,
+  () => {
+    // Auto-save whenever account data changes
+    accountStore.saveAccounts()
+  },
+  { deep: true, flush: 'post' }
+)
+
 onMounted(() => {
   initializeTagsInputs()
 })
@@ -318,7 +345,7 @@ onMounted(() => {
 <style scoped>
 .account-form {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #f8fafc;
   padding: 2rem;
 }
 
@@ -333,15 +360,14 @@ onMounted(() => {
 }
 
 .header-content {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
+  background: #ffffff;
+  border-radius: 12px;
   padding: 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
 }
 
 .title-section {
@@ -353,70 +379,107 @@ onMounted(() => {
   margin: 0;
   font-size: 2rem;
   font-weight: 600;
-  color: #2c3e50;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #1e293b;
 }
 
 .form-subtitle {
   margin: 0.5rem 0 0 0;
-  color: #7f8c8d;
+  color: #64748b;
   font-size: 1rem;
 }
 
 .add-account-btn {
   min-width: 60px;
   min-height: 60px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: #3b82f6;
   border: none;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
   transition: all 0.3s ease;
 }
 
 .add-account-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
 }
 
 .info-banner {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(52, 152, 219, 0.3);
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   margin-top: 1rem;
-  backdrop-filter: blur(10px);
 }
 
 .info-text {
-  color: #2c3e50;
+  color: #1e40af;
   font-size: 0.95rem;
   font-weight: 500;
 }
 
 /* Content Section */
 .content-section {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
+  background: #ffffff;
+  border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
 }
 
-.table-header {
-  display: flex;
-  padding: 1rem 0;
-  border-bottom: 2px solid #ecf0f1;
+/* Header Grid - matches data row grid exactly */
+.table-header-grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr 3fr 3fr 1fr;
+  grid-template-areas: "tags type login password delete";
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 2px solid #f1f5f9;
   margin-bottom: 1rem;
+  gap: 1rem;
 }
 
-.header-cell {
+.header-tags { 
+  grid-area: tags;
   display: flex;
   align-items: center;
   font-weight: 600;
-  color: #2c3e50;
+  color: #374151;
   font-size: 1rem;
-  padding: 0 0.5rem;
+}
+
+.header-type { 
+  grid-area: type;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #374151;
+  font-size: 1rem;
+}
+
+.header-login { 
+  grid-area: login;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #374151;
+  font-size: 1rem;
+}
+
+.header-password { 
+  grid-area: password;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #374151;
+  font-size: 1rem;
+}
+
+.header-delete { 
+  grid-area: delete;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #374151;
+  font-size: 1rem;
 }
 
 /* Account Cards */
@@ -427,63 +490,110 @@ onMounted(() => {
 }
 
 .account-card {
-  border-radius: 15px;
-  border: 1px solid #e8f4f8;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9));
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
   transition: all 0.3s ease;
   overflow: hidden;
 }
 
 .account-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-  border-color: #3498db;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
 }
 
-.account-row {
-  display: flex;
+/* CSS Grid Layout - INNOVATIVE APPROACH */
+.account-row-grid {
+  display: grid;
   align-items: center;
   padding: 1.5rem;
   gap: 1rem;
 }
 
-.field-container {
-  padding: 0 0.5rem;
+/* Local layout: 5 columns (tags, type, login, password, delete) */
+.local-layout {
+  grid-template-columns: 3fr 2fr 3fr 3fr 1fr;
+  grid-template-areas: "tags type login password delete";
 }
 
-/* Modern Inputs */
+/* LDAP layout: 4 columns (tags, type, login-expanded, delete) */
+.ldap-layout {
+  grid-template-columns: 3fr 2fr 6fr 1fr;
+  grid-template-areas: "tags type login delete";
+}
+
+.grid-tags { grid-area: tags; }
+.grid-type { grid-area: type; }
+.grid-login { grid-area: login; }
+.grid-password { grid-area: password; }
+.grid-delete { 
+  grid-area: delete; 
+  display: flex;
+  justify-content: center;
+}
+
+/* Modern Inputs - Fixed height and positioning */
 .modern-input :deep(.q-field__control) {
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 2px solid #e8f4f8;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
   transition: all 0.3s ease;
+  min-height: 40px;
+  height: 40px;
 }
 
 .modern-input :deep(.q-field__control):hover {
-  border-color: #3498db;
-  background: rgba(255, 255, 255, 0.95);
+  border-color: #9ca3af;
+  background: #ffffff;
 }
 
 .modern-input :deep(.q-field--focused .q-field__control) {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Error state - only change border color, maintain size */
+.modern-input :deep(.q-field--error .q-field__control) {
+  border-color: #ef4444 !important;
+  min-height: 40px !important;
+  height: 40px !important;
+}
+
+/* Hide error messages to prevent layout shift */
+.modern-input :deep(.q-field__messages) {
+  display: none;
 }
 
 .modern-select :deep(.q-field__control) {
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 2px solid #e8f4f8;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
   transition: all 0.3s ease;
+  min-height: 40px;
+  height: 40px;
 }
 
 .modern-select :deep(.q-field__control):hover {
-  border-color: #3498db;
-  background: rgba(255, 255, 255, 0.95);
+  border-color: #9ca3af;
+  background: #ffffff;
 }
 
 .modern-select :deep(.q-field--focused .q-field__control) {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Error state for select - only change border color, maintain size */
+.modern-select :deep(.q-field--error .q-field__control) {
+  border-color: #ef4444 !important;
+  min-height: 40px !important;
+  height: 40px !important;
+}
+
+/* Hide error messages to prevent layout shift */
+.modern-select :deep(.q-field__messages) {
+  display: none;
 }
 
 /* Error States */
@@ -498,21 +608,22 @@ onMounted(() => {
   align-items: center;
   padding: 12px 16px;
   background: rgba(149, 165, 166, 0.1);
-  border-radius: 12px;
-  border: 2px solid #ecf0f1;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
 }
 
 /* Delete Button */
 .delete-btn {
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  background: #ef4444;
   border: none;
-  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
   transition: all 0.3s ease;
 }
 
 .delete-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(231, 76, 60, 0.5);
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
 }
 
 /* Empty State */

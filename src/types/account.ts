@@ -2,7 +2,7 @@ export interface Tag {
   text: string
 }
 
-export type RecordType = 'LDAP' | 'Локальная'
+export type RecordType = 'LDAP' | 'Локальная' | 'Local'
 
 export interface Account {
   id: string

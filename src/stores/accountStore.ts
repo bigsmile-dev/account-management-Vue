@@ -75,7 +75,7 @@ export const useAccountStore = defineStore('accounts', () => {
   // Validate account
   const validateAccount = (account: Account): boolean => {
     if (!account.login.trim()) return false
-    if (account.recordType === 'Локальная' && !account.password?.trim()) return false
+    if ((account.recordType === 'Локальная' || account.recordType === 'Local') && !account.password?.trim()) return false
     return true
   }
 
